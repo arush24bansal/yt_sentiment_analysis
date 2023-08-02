@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs
 from termcolor import cprint
 import pandas as pd
 from datetime import datetime 
+from nltk.sentiment import SentimentIntensityAnalyzer
 
 def main():
 
@@ -29,10 +30,16 @@ def main():
 
     # Get Comments
     comments = getComments(youtube, videoId)
+    df = pd.DataFrame(comments)
+    
+    # TODO: Clean Data using 'demoji' and 'langdetect'
+    
+    
+    # Vader Sentiment Analysis
+    df = vader(df)
     
     # Create CSV
     cprint('creating CSV', 'cyan')
-    df = pd.DataFrame(comments)
     dtstr = datetime.now().strftime("%y%m%d%H%M%S")
     df.to_csv(f'./data/{dtstr}.csv', index=False)  
         
@@ -75,15 +82,23 @@ def getComments(service, videoId):
             commentIds.append(comment['id'])
             comments.append(comment['snippet']['textOriginal'])
             likeCounts.append(comment['snippet']['likeCount'])
-        if 'nextPageToken' in response and len(comments) < 2000:
-            request = service.commentThreads().list(
-                part='snippet',
-                videoId=videoId,
-                order='time',
-                textFormat="plainText",
-                pageToken=response['nextPageToken']
-            )
-        else:
-            return dict({'ID': commentIds, 'text': comments, 'Likes': likeCounts})
-        
+        #if 'nextPageToken' in response and len(comments) < 2000:
+        #    request = service.commentThreads().list(
+        #        part='snippet',
+        #        videoId=videoId,
+        #        order='time',
+        #        textFormat="plainText",
+        #        pageToken=response['nextPageToken']
+        #    )
+        #else:
+        return dict({'ID': commentIds, 'text': comments, 'Likes': likeCounts})
+    
+# VADER MODEL ANALYSIS
+def vader(data):
+    result = {}
+    sia = SentimentIntensityAnalyzer()
+    for i, row in data.iterrows():
+        result[row['ID']] = sia.polarity_scores(row['text'])
+    df = pd.DataFrame(result).T.reset_index().rename(columns={'index': 'ID'})
+    return data.merge(df, how='left', on=['ID'])
 main()
