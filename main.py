@@ -12,6 +12,8 @@ from urllib.parse import urlparse, parse_qs
 from termcolor import cprint
 import pandas as pd
 from datetime import datetime 
+from langdetect import detect
+from cleantext import clean
 from nltk.sentiment import SentimentIntensityAnalyzer
 
 def main():
@@ -30,10 +32,7 @@ def main():
 
     # Get Comments
     comments = getComments(youtube, videoId)
-    df = pd.DataFrame(comments)
-    
-    # TODO: Clean Data using 'demoji' and 'langdetect'
-    
+    df = pd.DataFrame(comments)    
     
     # Vader Sentiment Analysis
     df = vader(df)
@@ -79,9 +78,16 @@ def getComments(service, videoId):
         response = request.execute()
         for item in response['items']:
             comment = item['snippet']['topLevelComment']
-            commentIds.append(comment['id'])
-            comments.append(comment['snippet']['textOriginal'])
-            likeCounts.append(comment['snippet']['likeCount'])
+            text = comment['snippet']['textOriginal']
+            try:
+                # Check if the comment is in english
+                if text and detect(text) == 'en':\
+                    # Append Comment text without emojis
+                    comments.append(clean(text, no_emoji=True))
+                    commentIds.append(comment['id'])
+                    likeCounts.append(comment['snippet']['likeCount'])
+            except:
+                continue
         #if 'nextPageToken' in response and len(comments) < 2000:
         #    request = service.commentThreads().list(
         #        part='snippet',
@@ -98,7 +104,18 @@ def vader(data):
     result = {}
     sia = SentimentIntensityAnalyzer()
     for i, row in data.iterrows():
-        result[row['ID']] = sia.polarity_scores(row['text'])
+        scores = sia.polarity_scores(row['text'])
+        compound = scores['compound']
+        if compound >= 0.05:
+            sentiment = 'positive'
+        elif compound > -0.05:
+            sentiment = 'neutral'
+        else:
+            sentiment = 'negative'
+        scores['sentiment'] = sentiment
+        result[row['ID']] = scores
     df = pd.DataFrame(result).T.reset_index().rename(columns={'index': 'ID'})
     return data.merge(df, how='left', on=['ID'])
+
+
 main()
